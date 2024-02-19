@@ -184,10 +184,10 @@ fn get_check_insertion_fn(
     actor_filter: Arc<dyn Fn(&Actor) -> bool + Send + Sync>,
 ) -> impl Fn(&Job) -> Result<(), i32> {
     move |job: &Job| -> Result<(), i32> {
-        let eval_ctx = EvaluationContext {
+        let mut eval_ctx = EvaluationContext {
             goal: &insertion_ctx.problem.goal,
             job,
-            leg_selection: &LegSelection::Exhaustive,
+            leg_selection: LegSelection::Exhaustive,
             result_selector: &BestResultSelector::default(),
         };
 
@@ -199,7 +199,7 @@ fn get_check_insertion_fn(
             .try_fold(Err(-1), |_, route_ctx| {
                 let result = eval_job_insertion_in_route(
                     &insertion_ctx,
-                    &eval_ctx,
+                    &mut eval_ctx,
                     route_ctx,
                     InsertionPosition::Any,
                     InsertionResult::make_failure(),

@@ -159,7 +159,7 @@ fn insert_jobs(
     shuffle_prob: f64,
 ) {
     let random = &insertion_ctx.environment.random;
-    let leg_selection = LegSelection::Stochastic(random.clone());
+    let mut leg_selection = LegSelection::random_stochastic(random);
     let result_selector = BestResultSelector::default();
 
     let mut jobs = jobs;
@@ -177,11 +177,11 @@ fn insert_jobs(
         .uniform_int(0, get_route_ctx(insertion_ctx, route_idx).route().tour.job_activity_count() as i32)
         as usize;
 
-    let (failures, _) = jobs.into_iter().fold((Vec::new(), start_index), |(mut unassigned, start_index), job| {
-        let eval_ctx = EvaluationContext {
+    let (failures, _) = jobs.into_iter().map(|job| (job, leg_selection.next())).fold((Vec::new(), start_index), |(mut unassigned, start_index), (job, leg_selection)| {
+        let mut eval_ctx = EvaluationContext {
             goal: &insertion_ctx.problem.goal,
             job: &job,
-            leg_selection: &leg_selection,
+            leg_selection: leg_selection,
             result_selector: &result_selector,
         };
 
@@ -192,7 +192,7 @@ fn insert_jobs(
             .try_fold((InsertionResult::make_failure(), start_index), |_, insertion_idx| {
                 let insertion = eval_job_insertion_in_route(
                     insertion_ctx,
-                    &eval_ctx,
+                    &mut eval_ctx,
                     get_route_ctx(insertion_ctx, route_idx),
                     InsertionPosition::Concrete(insertion_idx),
                     // NOTE we don't try to insert the best, so alternative is a failure

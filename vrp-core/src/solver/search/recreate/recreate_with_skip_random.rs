@@ -19,7 +19,7 @@ impl RecreateWithSkipRandom {
             recreate: ConfigurableRecreate::new(
                 Box::<SkipRandomJobSelector>::default(),
                 Box::<SkipRandomRouteSelector>::default(),
-                LegSelection::Stochastic(random.clone()),
+                LegSelection::random_stochastic(&random),
                 ResultSelection::Stochastic(ResultSelectorProvider::new_default(random)),
                 Default::default(),
             ),

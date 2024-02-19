@@ -7,7 +7,7 @@ use crate::models::problem::Job;
 use crate::solver::search::{select_seed_job_with_tabu_list, LocalOperator, TabuList};
 use crate::solver::RefinementContext;
 use crate::utils::Noise;
-use rosomaxa::utils::map_reduce;
+use rosomaxa::utils::{into_map_reduce};
 
 /// A local search operator which tries to exchange jobs in best way between different routes.
 pub struct ExchangeInterRouteBest {
@@ -100,7 +100,7 @@ fn find_best_insertion_pair(
 
         let new_insertion_ctx = get_new_insertion_ctx(insertion_ctx, &seed_job, seed_route_idx).unwrap();
         let seed_route = new_insertion_ctx.solution.routes.get(seed_route_idx).unwrap();
-        let leg_selection = LegSelection::Stochastic(insertion_ctx.environment.random.clone());
+        let mut leg_selection = LegSelection::random_stochastic(&insertion_ctx.environment.random);
         let result_selector = NoiseResultSelector::new(noise.clone());
 
         let insertion_pair = new_insertion_ctx
@@ -109,23 +109,24 @@ fn find_best_insertion_pair(
             .iter()
             .enumerate()
             .filter(|(idx, _)| *idx != seed_route_idx && filter_route_indices(*idx))
-            .fold(Option::<InsertionSuccessPair>::None, |acc, (_, test_route)| {
-                let new_result = map_reduce(
+            .map(|(_, route)| (route, leg_selection.next()))
+            .fold(Option::<InsertionSuccessPair>::None, |acc, (test_route, mut leg_selection)| {
+                let new_result = into_map_reduce(
                     test_route
                         .route()
                         .tour
                         .jobs()
                         .enumerate()
                         .filter(|(idx, job)| !locked.contains(*job) && filter_jobs_indices(*idx))
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                    |(_, test_job)| {
+                        .map(|(_, job)| (job, leg_selection.next()))
+                        .collect::<Vec<_>>(),
+                    |(test_job, mut leg_selection)| {
                         // try to insert test job into seed tour
                         let seed_success = test_job_insertion(
                             &new_insertion_ctx,
                             seed_route,
                             test_job,
-                            &leg_selection,
+                            leg_selection.next(),
                             &result_selector,
                         )?;
 
@@ -139,7 +140,7 @@ fn find_best_insertion_pair(
                             &new_insertion_ctx,
                             &test_route,
                             &seed_job,
-                            &leg_selection,
+                            leg_selection,
                             &result_selector,
                         )?;
 
@@ -176,14 +177,14 @@ fn test_job_insertion(
     insertion_ctx: &InsertionContext,
     route_ctx: &RouteContext,
     job: &Job,
-    leg_selection: &LegSelection,
+    leg_selection: LegSelection,
     result_selector: &(dyn ResultSelector + Send + Sync),
 ) -> Option<InsertionSuccess> {
-    let eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
+    let mut eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
 
     let insertion = eval_job_insertion_in_route(
         insertion_ctx,
-        &eval_ctx,
+        &mut eval_ctx,
         route_ctx,
         InsertionPosition::Any,
         InsertionResult::make_failure(),

@@ -9,9 +9,10 @@ use crate::models::*;
 use crate::prelude::Problem;
 use hashbrown::HashMap;
 use rosomaxa::prelude::*;
-use rosomaxa::utils::SelectionSamplingIterator;
+use rosomaxa::utils::{DefaultPureRandom, SelectionSamplingIterator};
 use std::ops::Range;
 use std::sync::Arc;
+use rand::RngCore;
 
 /// A search operator which removes jobs from existing routes and prevents their insertion into
 /// the same routes again.
@@ -107,14 +108,14 @@ fn remove_jobs(
     let unassigned = &mut insertion_ctx.solution.unassigned;
     let sample = random.uniform_int(routes_range.start, routes_range.end) as usize;
 
-    SelectionSamplingIterator::new(insertion_ctx.solution.routes.iter_mut(), sample, random.clone())
+    SelectionSamplingIterator::new(insertion_ctx.solution.routes.iter_mut(), sample, DefaultPureRandom::with_seed(random.get_rng().next_u64()))
         .flat_map(|route_ctx| {
             #[allow(clippy::needless_collect)]
             let all_jobs = route_ctx.route().tour.jobs().filter(|job| !locked.contains(*job)).collect::<Vec<_>>();
             let amount = random.uniform_int(jobs_range.start, jobs_range.end) as usize;
 
             let jobs = if random.is_head_not_tails() {
-                let jobs = SelectionSamplingIterator::new(all_jobs.into_iter().cloned(), amount, random.clone())
+                let jobs = SelectionSamplingIterator::new(all_jobs.into_iter().cloned(), amount, DefaultPureRandom::with_seed(random.get_rng().next_u64()))
                     .collect::<Vec<_>>();
                 jobs.iter().for_each(|job| {
                     route_ctx.route_mut().tour.remove(job);

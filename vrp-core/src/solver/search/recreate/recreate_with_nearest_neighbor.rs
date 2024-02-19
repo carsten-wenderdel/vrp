@@ -17,7 +17,7 @@ impl RecreateWithNearestNeighbor {
             recreate: ConfigurableRecreate::new(
                 Box::<AllJobSelector>::default(),
                 Box::<AllRouteSelector>::default(),
-                LegSelection::Stochastic(random),
+                LegSelection::random_stochastic(&random),
                 ResultSelection::Concrete(Box::<BestResultSelector>::default()),
                 InsertionHeuristic::new(Box::new(PositionInsertionEvaluator::new(InsertionPosition::Last))),
             ),

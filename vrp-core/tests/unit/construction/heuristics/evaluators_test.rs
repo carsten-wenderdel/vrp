@@ -8,6 +8,7 @@ use crate::models::common::{Cost, Location, Schedule, TimeSpan, TimeWindow, Time
 use crate::models::problem::{Job, Single, VehicleDetail};
 use crate::models::solution::{Activity, Place, Registry};
 use std::sync::Arc;
+use rosomaxa::utils::DefaultPureRandom;
 
 type JobPlace = crate::models::problem::Place;
 
@@ -38,19 +39,19 @@ fn evaluate_job_insertion(
     insertion_position: InsertionPosition,
 ) -> InsertionResult {
     let route_selector = AllRouteSelector::default();
-    let leg_selection = LegSelection::Stochastic(insertion_ctx.environment.random.clone());
+    let leg_selection = LegSelection::Stochastic(DefaultPureRandom::for_tests());
     let result_selector = BestResultSelector::default();
     let routes = route_selector.select(insertion_ctx, &[]).collect::<Vec<_>>();
 
-    let eval_ctx = EvaluationContext {
+    let mut eval_ctx = EvaluationContext {
         goal: &insertion_ctx.problem.goal,
         job,
-        leg_selection: &leg_selection,
+        leg_selection: leg_selection,
         result_selector: &result_selector,
     };
 
     routes.iter().fold(InsertionResult::make_failure(), |acc, route_ctx| {
-        eval_job_insertion_in_route(insertion_ctx, &eval_ctx, route_ctx, insertion_position, acc)
+        eval_job_insertion_in_route(insertion_ctx, &mut eval_ctx, route_ctx, insertion_position, acc)
     })
 }
 

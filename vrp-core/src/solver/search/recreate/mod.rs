@@ -98,7 +98,7 @@ impl Recreate for ConfigurableRecreate {
             insertion_ctx,
             self.job_selector.as_ref(),
             self.route_selector.as_ref(),
-            &self.leg_selection,
+            self.leg_selection.generate_copy(),
             result_selector,
         )
     }

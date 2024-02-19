@@ -2,6 +2,7 @@
 #[path = "../../tests/unit/utils/parallel_test.rs"]
 mod parallel_test;
 
+pub use self::actual::into_map_reduce;
 pub use self::actual::map_reduce;
 pub use self::actual::parallel_collect;
 pub use self::actual::parallel_foreach_mut;
@@ -68,6 +69,18 @@ mod actual {
         R: Send,
     {
         source.par_iter().map(map_op).reduce(default_op, reduce_op)
+    }
+
+    /// Performs map reduce operations in parallel.
+    pub fn into_map_reduce<T, FM, FR, FD, R>(source: Vec<T>, map_op: FM, default_op: FD, reduce_op: FR) -> R
+        where
+            T: Send + Sync,
+            FM: Fn(T) -> R + Sync + Send,
+            FR: Fn(R, R) -> R + Sync + Send,
+            FD: Fn() -> R + Sync + Send,
+            R: Send,
+    {
+        source.into_par_iter().map(map_op).reduce(default_op, reduce_op)
     }
 
     /// Performs mutable foreach in parallel.

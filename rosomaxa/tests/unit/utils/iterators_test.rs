@@ -2,11 +2,12 @@ use super::*;
 use crate::utils::DefaultRandom;
 
 mod selection_sampling {
+    use std::sync::Arc;
     use super::*;
 
     #[test]
     fn can_sample_from_large_range() {
-        let random = Arc::new(DefaultRandom::default());
+        let random = DefaultPureRandom::for_tests();
         let amount = 5;
 
         let numbers = SelectionSamplingIterator::new(0..100, amount, random).collect::<Vec<_>>();
@@ -25,7 +26,7 @@ mod selection_sampling {
     #[test]
     fn can_sample_from_same_range() {
         let amount = 5;
-        let random = Arc::new(DefaultRandom::default());
+        let random = DefaultPureRandom::for_tests();
 
         let numbers = SelectionSamplingIterator::new(0..amount, amount, random).collect::<Vec<_>>();
 
@@ -44,6 +45,7 @@ mod selection_sampling {
 }
 
 mod range_sampling {
+    use std::sync::Arc;
     use super::*;
     use crate::prelude::RandomGen;
 
@@ -111,7 +113,6 @@ mod range_sampling {
 
 mod sampling_search {
     use super::*;
-    use crate::Environment;
     use std::cell::RefCell;
     use std::sync::RwLock;
 
@@ -142,7 +143,7 @@ mod sampling_search {
         let total_size = 1000;
         let sample_size = 8;
         let target = 10;
-        let random = Environment::default().random;
+        let mut random = DefaultPureRandom::for_tests();
 
         let mut results = (0..100)
             .map(|_| {
@@ -156,7 +157,7 @@ mod sampling_search {
 
                 let idx = data
                     .iter()
-                    .sample_search(sample_size, random.clone(), map_fn, |item| item.idx, compare_fn)
+                    .sample_search(sample_size, &mut random, map_fn, |item| item.idx, compare_fn)
                     .unwrap()
                     .idx;
                 let count = *counter.read().unwrap();
@@ -181,7 +182,7 @@ mod sampling_search {
                 66, 47, 96, 82, 34, 20, 23, 94, 11, 18, 89, 79, 47, 77, 30,
                 48, 8, 45, 11, 21, 54, 15, 26, 23, 37, 58, 27, 31, 11, 60,
             ],
-            4, 12, 96,
+            4, 11, 97,
         ),
         case02_at_end: (
             vec![
@@ -189,14 +190,14 @@ mod sampling_search {
                 48, 8, 45, 11, 21, 54, 15, 26, 23, 37, 58, 27, 31, 11, 60,
                 76, 36, 93, 15, 21, 40, 97, 77, 35, 86, 61, 71, 7, 32, 29,
             ],
-            4, 7, 86,
+            4, 8, 86,
         ),
         case03_wave: (
             vec![
                 2, 5, 6, 10, 18, 24, 25, 29, 34, 35, 37, 38, 40, 43, 45, 53, 55, 60, 61, 63, 68,
                 69, 71, 73, 77, 80, 81, 82, 84, 91, 96, 93, 90, 86, 80, 72, 71, 65, 62, 56, 55, 52,
             ],
-            8, 13, 96,
+            8, 16, 93,
         ),
     }
 
@@ -206,14 +207,14 @@ mod sampling_search {
         expected_counter: usize,
         expected_value: i32,
     ) {
-        let random = Arc::new(DefaultRandom::new_repeatable());
+        let mut random = DefaultPureRandom::for_tests();
         let counter = RefCell::new(0);
         let value = sequence
             .into_iter()
             .enumerate()
             .sample_search(
                 sample_size,
-                random.clone(),
+                &mut random,
                 |(_idx, i)| {
                     *counter.borrow_mut() += 1;
                     //println!("{} probe: {i} at {idx}", counter.borrow());

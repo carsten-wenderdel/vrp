@@ -8,7 +8,6 @@ use crate::utils::*;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
-use std::sync::Arc;
 
 /// An iterator which collects items into group.
 pub trait CollectGroupBy: Iterator {
@@ -47,12 +46,12 @@ pub struct SelectionSamplingIterator<I: Iterator> {
     needed: usize,
     size: usize,
     iterator: I,
-    random: Arc<dyn Random + Send + Sync>,
+    random: DefaultPureRandom,
 }
 
 impl<I: Iterator> SelectionSamplingIterator<I> {
     /// Creates a new instance of `SelectionSamplingIterator`.
-    pub fn new(iterator: I, amount: usize, random: Arc<dyn Random + Send + Sync>) -> Self {
+    pub fn new(iterator: I, amount: usize, random: DefaultPureRandom) -> Self {
         assert!(amount > 0);
         Self {
             // NOTE relying on lower bound size hint!
@@ -131,7 +130,7 @@ pub trait SelectionSamplingSearch: Iterator {
     fn sample_search<'a, T, R, FM, FI, FC>(
         self,
         sample_size: usize,
-        random: Arc<dyn Random + Send + Sync>,
+        random: &mut DefaultPureRandom,
         mut map_fn: FM,
         index_fn: FI,
         compare_fn: FC,
@@ -159,7 +158,7 @@ pub trait SelectionSamplingSearch: Iterator {
             // keeps track data to track properly right range limit if best is found at last
             let (orig_right, last_probe_idx) = (state.right, take.min(sample_size - 1));
 
-            state = SelectionSamplingIterator::new(iterator, sample_size, random.clone())
+            state = SelectionSamplingIterator::new(iterator, sample_size, random.new_pure_random())
                 .enumerate()
                 .fold(state, |mut acc, (probe_idx, item)| {
                     let item_idx = index_fn(&item);

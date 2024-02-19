@@ -18,6 +18,9 @@ pub use self::noise::*;
 mod parallel;
 pub use self::parallel::*;
 
+mod pure_random;
+pub use self::pure_random::*;
+
 mod random;
 pub use self::random::*;
 
