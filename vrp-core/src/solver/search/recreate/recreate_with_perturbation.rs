@@ -18,7 +18,7 @@ impl RecreateWithPerturbation {
             recreate: ConfigurableRecreate::new(
                 Box::<AllJobSelector>::default(),
                 Box::<AllRouteSelector>::default(),
-                LegSelection::Stochastic(random.clone()),
+                LegSelection::random_stochastic(&random),
                 ResultSelection::Concrete(Box::new(NoiseResultSelector::new(noise))),
                 Default::default(),
             ),

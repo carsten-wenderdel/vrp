@@ -258,7 +258,7 @@ impl InsertionHeuristic {
         insertion_ctx: InsertionContext,
         job_selector: &(dyn JobSelector + Send + Sync),
         route_selector: &(dyn RouteSelector + Send + Sync),
-        leg_selection: &LegSelection,
+        mut leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionContext {
         let mut insertion_ctx = insertion_ctx;
@@ -275,7 +275,7 @@ impl InsertionHeuristic {
             let routes = route_selector.select(&insertion_ctx, jobs.as_slice()).collect::<Vec<_>>();
 
             let result =
-                self.insertion_evaluator.evaluate_all(&insertion_ctx, &jobs, &routes, leg_selection, result_selector);
+                self.insertion_evaluator.evaluate_all(&insertion_ctx, &jobs, &routes, leg_selection.next(), result_selector);
 
             match result {
                 InsertionResult::Success(success) => {

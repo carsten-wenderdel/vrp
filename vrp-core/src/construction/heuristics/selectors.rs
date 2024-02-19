@@ -7,7 +7,7 @@ use crate::models::problem::Job;
 use crate::models::solution::Leg;
 use crate::utils::*;
 use rand::prelude::*;
-use rosomaxa::utils::{map_reduce, parallel_collect, Random};
+use rosomaxa::utils::{into_map_reduce, Random};
 use std::cmp::Ordering;
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -74,7 +74,7 @@ pub trait InsertionEvaluator {
         insertion_ctx: &InsertionContext,
         job: &Job,
         routes: &[&RouteContext],
-        leg_selection: &LegSelection,
+        leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult;
 
@@ -84,7 +84,7 @@ pub trait InsertionEvaluator {
         insertion_ctx: &InsertionContext,
         route_ctx: &RouteContext,
         jobs: &[&Job],
-        leg_selection: &LegSelection,
+        leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult;
 
@@ -94,7 +94,7 @@ pub trait InsertionEvaluator {
         insertion_ctx: &InsertionContext,
         jobs: &[&Job],
         routes: &[&RouteContext],
-        leg_selection: &LegSelection,
+        leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult;
 }
@@ -122,13 +122,18 @@ impl PositionInsertionEvaluator {
         insertion_ctx: &InsertionContext,
         jobs: &[&Job],
         routes: &[&RouteContext],
-        leg_selection: &LegSelection,
+        leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> Vec<InsertionResult> {
+        let mut leg_selection = leg_selection;
+        // A `LegSelection` is now needed on multiple threads. `LegSelection` is not thread safe due to the rng.
+        // Therefore, we need to create a dedicated (different) `LegSelection` for each iteration.
         if Self::is_fold_jobs(insertion_ctx) {
-            parallel_collect(jobs, |job| self.evaluate_job(insertion_ctx, job, routes, leg_selection, result_selector))
+            let jobs_and_leg_selection: Vec<(&Job, LegSelection)> = jobs.iter().map(|&job|(job, leg_selection.next())).collect();
+            parallel_into_collect(jobs_and_leg_selection, |(job, leg_selection)| self.evaluate_job(insertion_ctx, job, routes, leg_selection, result_selector))
         } else {
-            parallel_collect(routes, |route_ctx| {
+            let routes_and_leg_selection: Vec<(&RouteContext, LegSelection)> = routes.iter().map(|&route_ctx|(route_ctx, leg_selection.next())).collect();
+            parallel_into_collect(routes_and_leg_selection, |(route_ctx, leg_selection)| {
                 self.evaluate_route(insertion_ctx, route_ctx, jobs, leg_selection, result_selector)
             })
         }
@@ -145,13 +150,13 @@ impl InsertionEvaluator for PositionInsertionEvaluator {
         insertion_ctx: &InsertionContext,
         job: &Job,
         routes: &[&RouteContext],
-        leg_selection: &LegSelection,
+        leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult {
-        let eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
+        let mut eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
 
         routes.iter().fold(InsertionResult::make_failure(), |acc, route_ctx| {
-            eval_job_insertion_in_route(insertion_ctx, &eval_ctx, route_ctx, self.insertion_position, acc)
+            eval_job_insertion_in_route(insertion_ctx, &mut eval_ctx, route_ctx, self.insertion_position, acc)
         })
     }
 
@@ -160,12 +165,15 @@ impl InsertionEvaluator for PositionInsertionEvaluator {
         insertion_ctx: &InsertionContext,
         route_ctx: &RouteContext,
         jobs: &[&Job],
-        leg_selection: &LegSelection,
+        mut leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult {
-        jobs.iter().fold(InsertionResult::make_failure(), |acc, job| {
-            let eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
-            eval_job_insertion_in_route(insertion_ctx, &eval_ctx, route_ctx, self.insertion_position, acc)
+        // A `LegSelection` is now needed on multiple threads. `LegSelection` is not thread safe due to the rng.
+        // Therefore, we need to create a dedicated (different) `LegSelection` for each iteration.
+        let jobs_and_leg_selection: Vec<(&Job, LegSelection)> = jobs.iter().map(|&job|(job, leg_selection.next())).collect();
+        jobs_and_leg_selection.into_iter().fold(InsertionResult::make_failure(), |acc, (job, leg_selection)| {
+            let mut eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
+            eval_job_insertion_in_route(insertion_ctx, &mut eval_ctx, route_ctx, self.insertion_position, acc)
         })
     }
 
@@ -174,20 +182,22 @@ impl InsertionEvaluator for PositionInsertionEvaluator {
         insertion_ctx: &InsertionContext,
         jobs: &[&Job],
         routes: &[&RouteContext],
-        leg_selection: &LegSelection,
+        mut leg_selection: LegSelection,
         result_selector: &(dyn ResultSelector + Send + Sync),
     ) -> InsertionResult {
         if Self::is_fold_jobs(insertion_ctx) {
-            map_reduce(
-                jobs,
-                |job| self.evaluate_job(insertion_ctx, job, routes, leg_selection, result_selector),
+            let jobs_and_leg_selection: Vec<(&Job, LegSelection)> = jobs.iter().map(|&job|(job, leg_selection.next())).collect();
+            into_map_reduce(
+                jobs_and_leg_selection,
+                |(job, leg_selection)| self.evaluate_job(insertion_ctx, job, routes, leg_selection, result_selector),
                 InsertionResult::make_failure,
                 |a, b| result_selector.select_insertion(insertion_ctx, a, b),
             )
         } else {
-            map_reduce(
-                routes,
-                |route| self.evaluate_route(insertion_ctx, route, jobs, leg_selection, result_selector),
+            let routes_and_leg_selection: Vec<(&RouteContext, LegSelection)> = routes.iter().map(|&job|(job, leg_selection.next())).collect();
+            into_map_reduce(
+                routes_and_leg_selection,
+                |(route, leg_selection)| self.evaluate_route(insertion_ctx, route, jobs, leg_selection, result_selector),
                 InsertionResult::make_failure,
                 |a, b| result_selector.select_insertion(insertion_ctx, a, b),
             )
@@ -403,18 +413,46 @@ impl ResultSelectorProvider {
 }
 
 /// Provides way to control routing leg selection mode.
-#[derive(Clone)]
+// #[derive(Clone)]
 pub enum LegSelection {
     /// Stochastic mode: depending on route size, not all legs could be selected.
-    Stochastic(Arc<dyn Random + Send + Sync>),
+    Stochastic(DefaultPureRandom),
     /// Exhaustive mode: all legs are selected.
     Exhaustive,
 }
 
 impl LegSelection {
+    /// This behaves similar the trait `Copy`, but we don't implement the trait, as usually this behaviour
+    /// is not desired for random number generators.
+    ///
+    /// In case of `Stochastic` the random number generator is different, so results are not the same.
+    pub fn generate_copy(&self) -> Self {
+        match self {
+            LegSelection::Stochastic(_) => LegSelection::Stochastic(DefaultPureRandom::new_random()),
+            LegSelection::Exhaustive => LegSelection::Exhaustive
+        }
+    }
+
+    /// Can be deleted once `Random` and `DefaultRandom` are gone.
+    pub fn random_stochastic(random: &Arc<dyn Random + Send + Sync>) -> Self {
+        LegSelection::Stochastic(DefaultPureRandom::with_seed(random.get_rng().next_u64()))
+    }
+
+    /// Creates another, similar LegSelection. In case of `Exhaustive`, the return value is also `Exhaustive`.
+    /// In case of `Stochastic`, it's also `Stochastic`, but including another rng.
+    ///
+    /// This can be helpful when many different LegSelections with different random behaviour have to be
+    /// created, for example in iterators.
+    pub fn next(&mut self) -> Self {
+        match self {
+            LegSelection::Stochastic(random) => LegSelection::Stochastic(DefaultPureRandom::with_seed(random.next_u64())),
+            LegSelection::Exhaustive => LegSelection::Exhaustive
+        }
+    }
+
     /// Selects a best leg for insertion.
     pub(crate) fn sample_best<R, FM, FC>(
-        &self,
+        &mut self,
         route_ctx: &RouteContext,
         job: &Job,
         skip: usize,
@@ -427,7 +465,7 @@ impl LegSelection {
         FM: FnMut(Leg, R) -> ControlFlow<R, R>,
         FC: Fn(&R, &R) -> bool,
     {
-        if let Some((sample_size, random)) = self.get_sample_data(route_ctx, job, skip) {
+        if let Some((sample_size, mut random)) = self.get_sample_data(route_ctx, job, skip) {
             route_ctx
                 .route()
                 .tour
@@ -435,7 +473,7 @@ impl LegSelection {
                 .skip(skip)
                 .sample_search(
                     sample_size,
-                    random.clone(),
+                    &mut random,
                     &mut |leg: Leg<'_>| map_fn(leg, R::default()).unwrap_value(),
                     |leg: &Leg<'_>| leg.1 - skip,
                     &compare_fn,
@@ -448,14 +486,14 @@ impl LegSelection {
 
     /// Returns a sample data for stochastic mode.
     fn get_sample_data(
-        &self,
+        &mut self,
         route_ctx: &RouteContext,
         job: &Job,
         skip: usize,
-    ) -> Option<(usize, Arc<dyn Random + Send + Sync>)> {
+    ) -> Option<(usize, DefaultPureRandom)> {
         match self {
             Self::Stochastic(random) => {
-                let gen_usize = |min: i32, max: i32| random.uniform_int(min, max) as usize;
+                let mut gen_usize = |min: i32, max: i32| random.uniform_int(min, max) as usize;
                 let greedy_threshold = match job {
                     Job::Single(_) => gen_usize(12, 24),
                     Job::Multi(_) => gen_usize(8, 16),
@@ -472,7 +510,7 @@ impl LegSelection {
                             Job::Single(_) => 8,
                             Job::Multi(_) => 4,
                         },
-                        random.clone(),
+                        random.new_pure_random(),
                     ))
                 }
             }

@@ -88,7 +88,6 @@ fn synchronize_jobs(
     goal: &GoalContext,
 ) -> HashMap<Job, Vec<Arc<Single>>> {
     let position = InsertionPosition::Last;
-    let leg_selection = LegSelection::Exhaustive;
     let result_selector = BestResultSelector::default();
 
     let (synchronized_jobs, _) = route_ctx
@@ -106,17 +105,17 @@ fn synchronize_jobs(
                 let is_invalid_multi_job = invalid_multi_job_ids.contains(&job);
 
                 if !is_already_processed && !is_invalid_multi_job {
-                    let eval_ctx = EvaluationContext {
+                    let mut eval_ctx = EvaluationContext {
                         goal,
                         job: &job,
-                        leg_selection: &leg_selection,
+                        leg_selection: LegSelection::Exhaustive,
                         result_selector: &result_selector,
                     };
                     let route_ctx = new_insertion_ctx.solution.routes.get(route_idx).unwrap();
 
                     let insertion_result = eval_single_constraint_in_route(
                         new_insertion_ctx,
-                        &eval_ctx,
+                        &mut eval_ctx,
                         route_ctx,
                         single,
                         position,

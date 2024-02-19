@@ -17,14 +17,13 @@ impl HeuristicSolutionProcessing for UnassignmentReason {
         let mut insertion_ctx = solution;
 
         let unassigned = insertion_ctx.solution.unassigned.drain().collect::<Vec<_>>();
-        let leg_selection = LegSelection::Exhaustive;
         let result_selector = BestResultSelector::default();
 
         let unassigned = parallel_into_collect(unassigned, |(job, code)| {
-            let eval_ctx = EvaluationContext {
+            let mut eval_ctx = EvaluationContext {
                 goal: &insertion_ctx.problem.goal,
                 job: &job,
-                leg_selection: &leg_selection,
+                leg_selection: LegSelection::Exhaustive,
                 result_selector: &result_selector,
             };
             let details = insertion_ctx
@@ -36,7 +35,7 @@ impl HeuristicSolutionProcessing for UnassignmentReason {
                         .map(|leg_idx| {
                             eval_job_insertion_in_route(
                                 &insertion_ctx,
-                                &eval_ctx,
+                                &mut eval_ctx,
                                 route_ctx,
                                 InsertionPosition::Concrete(leg_idx),
                                 InsertionResult::make_failure(),

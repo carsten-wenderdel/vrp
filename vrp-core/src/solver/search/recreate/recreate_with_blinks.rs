@@ -124,7 +124,7 @@ impl<T: LoadOps> RecreateWithBlinks<T> {
         Self {
             job_selectors: selectors.into_iter().map(|(selector, _)| selector).collect(),
             route_selector: Box::<AllRouteSelector>::default(),
-            leg_selection: LegSelection::Stochastic(random.clone()),
+            leg_selection: LegSelection::random_stochastic(&random),
             result_selector: Box::new(BlinkResultSelector::new_with_defaults(random)),
             insertion_heuristic: Default::default(),
             weights,
@@ -157,7 +157,7 @@ impl<T: LoadOps> Recreate for RecreateWithBlinks<T> {
             insertion_ctx,
             job_selector,
             self.route_selector.as_ref(),
-            &self.leg_selection,
+            self.leg_selection.generate_copy(),
             self.result_selector.as_ref(),
         )
     }

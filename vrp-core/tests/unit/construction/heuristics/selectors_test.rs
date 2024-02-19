@@ -81,7 +81,7 @@ mod selections {
 
     fn can_use_stochastic_selection_mode_impl(skip: usize, activities: usize, expected_threshold: usize) {
         let target = 10;
-        let selection_mode = LegSelection::Stochastic(Environment::default().random);
+        let mut selection_mode = LegSelection::random_stochastic(&Environment::default().random);
         let (_, solution) = generate_matrix_routes_with_defaults(activities, 1, false);
         let route_ctx = RouteContext::new_with_state(solution.routes.into_iter().next().unwrap(), Default::default());
         let mut counter = 0;

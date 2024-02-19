@@ -19,7 +19,7 @@ pub struct EvaluationContext<'a> {
     /// A job which is about to be inserted.
     pub job: &'a Job,
     /// A leg selection mode.
-    pub leg_selection: &'a LegSelection,
+    pub leg_selection: LegSelection,
     /// A result selector.
     pub result_selector: &'a (dyn ResultSelector + Send + Sync),
 }
@@ -39,7 +39,7 @@ pub enum InsertionPosition {
 /// at given position constraint.
 pub fn eval_job_insertion_in_route(
     insertion_ctx: &InsertionContext,
-    eval_ctx: &EvaluationContext,
+    eval_ctx: &mut EvaluationContext,
     route_ctx: &RouteContext,
     position: InsertionPosition,
     alternative: InsertionResult,
@@ -84,7 +84,7 @@ pub fn eval_job_insertion_in_route(
 /// Evaluates possibility to preform insertion in route context only.
 /// NOTE: doesn't evaluate constraints on route level.
 pub fn eval_job_constraint_in_route(
-    eval_ctx: &EvaluationContext,
+    eval_ctx: &mut EvaluationContext,
     route_ctx: &RouteContext,
     position: InsertionPosition,
     route_costs: InsertionCost,
@@ -98,7 +98,7 @@ pub fn eval_job_constraint_in_route(
 
 pub(crate) fn eval_single_constraint_in_route(
     insertion_ctx: &InsertionContext,
-    eval_ctx: &EvaluationContext,
+    eval_ctx: &mut EvaluationContext,
     route_ctx: &RouteContext,
     single: &Arc<Single>,
     position: InsertionPosition,
@@ -119,7 +119,7 @@ pub(crate) fn eval_single_constraint_in_route(
 }
 
 fn eval_single(
-    eval_ctx: &EvaluationContext,
+    eval_ctx: &mut EvaluationContext,
     route_ctx: &RouteContext,
     single: &Arc<Single>,
     position: InsertionPosition,
@@ -151,7 +151,7 @@ fn eval_single(
 }
 
 fn eval_multi(
-    eval_ctx: &EvaluationContext,
+    eval_ctx: &mut EvaluationContext,
     route_ctx: &RouteContext,
     multi: &Arc<Multi>,
     position: InsertionPosition,
@@ -244,7 +244,7 @@ fn analyze_insertion_in_route(
                 init
             }
         }
-        None => eval_ctx.leg_selection.sample_best(
+        None => eval_ctx.leg_selection.generate_copy().sample_best(
             route_ctx,
             eval_ctx.job,
             init.index,
